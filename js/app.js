@@ -1,9 +1,9 @@
 // Party Games : accueil, profil, Quiz, Blind test et Devine le mot en solo ou en salon.
-import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=12';
-import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=12';
-import { fetchArtists } from './deezer.js?v=12';
-import { MOTS } from './mots.js?v=12';
-import { QUI_THEMES, PERSOS } from './qui.js?v=12';
+import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=13';
+import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=13';
+import { fetchArtists } from './deezer.js?v=13';
+import { MOTS } from './mots.js?v=13';
+import { QUI_THEMES, PERSOS } from './qui.js?v=13';
 
 const $ = (id) => document.getElementById(id);
 const view = () => $('view-game');
@@ -16,7 +16,7 @@ const backHome = `<a href="#accueil" class="btn ghost back">← Retour aux jeux<
 
 // Le réseau (Firebase) ne se charge que quand on joue en salon.
 let netP = null;
-const getNet = () => (netP = netP || import('./net.js?v=12'));
+const getNet = () => (netP = netP || import('./net.js?v=13'));
 
 // ---------- Profil ----------
 const store = {

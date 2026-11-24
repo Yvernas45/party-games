@@ -67,7 +67,7 @@ const PERSOS = {
     { n: 'Nemo', s: 'Le Monde de Nemo' }, { n: 'Flash McQueen', s: 'Cars' }, { n: 'Wall-E', s: 'Wall-E' }, { n: 'Bob Razowski', s: 'Monstres et Cie' }
   ],
   youtube: [
-    { n: 'Squeezie', s: 'YouTubeur' }, { n: 'Cyprien', s: 'YouTubeur' }, { n: 'Norman', s: 'YouTubeur' }, { n: 'Natoo', s: 'YouTubeuse' },
+    { n: 'Squeezie', s: 'YouTubeur' }, { n: 'Cyprien', s: 'YouTubeur' }, { n: 'Terracid', s: 'YouTubeur' }, { n: 'Natoo', s: 'YouTubeuse' },
     { n: 'Tibo InShape', s: 'YouTubeur' }, { n: 'Michou', s: 'YouTubeur' }, { n: 'Inoxtag', s: 'YouTubeur' }, { n: 'Amixem', s: 'YouTubeur' },
     { n: 'McFly et Carlito', s: 'YouTubeurs' }, { n: 'Léna Situations', s: 'YouTubeuse' }, { n: 'EnjoyPhoenix', s: 'YouTubeuse' }, { n: 'Joyca', s: 'YouTubeur' },
     { n: 'Mister V', s: 'YouTubeur' }, { n: 'Seb la Frite', s: 'YouTubeur' }, { n: 'Gotaga', s: 'Streamer' }, { n: 'HugoDécrypte', s: 'YouTubeur' },
