@@ -224,3 +224,17 @@ tr.ok td.num{color:#2f8f5b;font-weight:600}
 @media(max-width:480px){.qboard{grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px}.face{width:52px;height:52px}.pc{font-size:13px}}
 @media(prefers-reduced-motion:reduce){.pc{transition:none}}
 .game .qlog{padding:0;margin:0}.game .qlog li{margin:0}
+
+/* Bandeau d'accueil : hauteur réduite */
+.player{padding:14px clamp(18px,3vw,28px);margin-top:clamp(12px,2vw,20px);gap:clamp(16px,3vw,40px)}
+.player h1{font-size:clamp(24px,2.6vw,32px);text-wrap:nowrap}
+.player p{margin-top:4px;font-size:15px;max-width:none}
+.hello{gap:14px}
+.hello svg{width:clamp(48px,5vw,60px)}
+.player .join{padding:10px 14px;gap:6px}
+.join .lbl{font-size:14px}
+.join .note{font-size:13px}
+.join .err:empty{display:none}
+@media(max-width:720px){.player h1{text-wrap:balance}}
+.soon{display:flex;align-items:center;gap:10px;margin:16px 0 0;padding:14px 18px;border:1px dashed var(--line);border-radius:12px;color:var(--soft);font-size:14px}
+.soon-dot{width:8px;height:8px;border-radius:50%;background:var(--acc);flex:none}
