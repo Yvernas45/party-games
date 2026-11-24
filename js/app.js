@@ -1,9 +1,9 @@
 // Party Games : accueil, profil, Quiz, Blind test et Devine le mot en solo ou en salon.
-import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=10';
-import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=10';
-import { fetchArtists } from './deezer.js?v=10';
-import { MOTS } from './mots.js?v=10';
-import { QUI_THEMES, PERSOS } from './qui.js?v=10';
+import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=11';
+import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=11';
+import { fetchArtists } from './deezer.js?v=11';
+import { MOTS } from './mots.js?v=11';
+import { QUI_THEMES, PERSOS } from './qui.js?v=11';
 
 const $ = (id) => document.getElementById(id);
 const view = () => $('view-game');
@@ -16,7 +16,7 @@ const backHome = `<a href="#accueil" class="btn ghost back">← Retour aux jeux<
 
 // Le réseau (Firebase) ne se charge que quand on joue en salon.
 let netP = null;
-const getNet = () => (netP = netP || import('./net.js?v=10'));
+const getNet = () => (netP = netP || import('./net.js?v=11'));
 
 // ---------- Profil ----------
 const store = {
@@ -280,8 +280,15 @@ if (![1, 3, 5, 10].includes(mot.cfg.count)) mot.cfg.count = 3;
 const motItems = (cfg) => shuffle(MOTS[cfg.len] || MOTS[5]).slice(0, cfg.count).map(w => ({ w }));
 const motLetter = (k) => (k || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
 
-// Essais d'un joueur pour la manche i (stockés « MAISON,PORTE,… »).
-const motGuesses = (st, i, uid) => { const a = ((st.answers || {})[i] || {})[uid]; return a && a.v ? String(a.v).split(',') : []; };
+// Chaque essai a sa propre case : answers/(i*6+k)/joueur = { v: 'MAISON', t }.
+// On n'écrase jamais une case déjà remplie (la base Firebase le refuse aux invités).
+const motSlot = (i, k) => i * MAX_TRIES + k;
+const motEntries = (st, i, uid) => {
+  const out = [];
+  for (let k = 0; k < MAX_TRIES; k++) { const a = ((st.answers || {})[motSlot(i, k)] || {})[uid]; if (!a || !a.v) break; out.push(a); }
+  return out;
+};
+const motGuesses = (st, i, uid) => motEntries(st, i, uid).map(a => String(a.v));
 // c = bien placée, p = présente ailleurs, a = absente (les lettres en double sont comptées correctement).
 const motColors = (g, w) => {
   const res = Array(w.length).fill('a'), left = {};
@@ -292,8 +299,9 @@ const motColors = (g, w) => {
 // Gagnant de la manche : celui qui a trouvé le plus tôt.
 const motWinner = (st, i) => {
   const w = st.items[i].w; let best = null;
-  Object.entries((st.answers || {})[i] || {}).forEach(([u, a]) => {
-    if (a && a.v && String(a.v).split(',').includes(w) && (!best || a.t < best.t)) best = { uid: u, t: a.t, tries: String(a.v).split(',').length };
+  Object.keys(st.players || {}).forEach((u) => {
+    const e = motEntries(st, i, u), k = e.findIndex(a => String(a.v) === w);
+    if (k >= 0 && (!best || e[k].t < best.t)) best = { uid: u, t: e[k].t, tries: k + 1 };
   });
   return best;
 };
@@ -400,8 +408,13 @@ const motKey = (key) => {
     if (cur.typed.length < w.length) { if (fb) { fb.className = 'fb ko'; fb.textContent = `Le mot fait ${w.length} lettres.`; } return; }
     if (cur.sentAt === `${i}|${mine.length}`) return;
     cur.sentAt = `${i}|${mine.length}`;
-    const g = cur.typed; cur.typed = '';
-    ctl.guess(i, [...mine, g].join(','));
+    const g = cur.typed, sent = cur.sentAt; cur.typed = '';
+    Promise.resolve((ctl.put || ctl.answer).call(ctl, motSlot(i, mine.length), g)).catch((err) => {
+      console.error('Devine le mot : essai refusé', err);
+      if (cur && cur.sentAt === sent) { cur.sentAt = ''; cur.typed = g; }
+      const f = $('fb'); if (f) { f.className = 'fb ko'; f.textContent = 'Ton essai n’a pas été envoyé. Vérifie ta connexion et réessaie.'; }
+      const row = $('cur-row'); if (row) row.querySelectorAll('.tile').forEach((t, k) => { t.textContent = g[k] || ''; t.classList.toggle('typed', !!g[k]); });
+    });
     return;
   } else if (/^[A-Z]$/.test(key) && cur.typed.length < w.length) cur.typed += key;
   if (fb) { fb.className = 'fb'; fb.textContent = ''; }

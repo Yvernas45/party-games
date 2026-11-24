@@ -1,5 +1,5 @@
 // Extraits Deezer : API publique, sans compte, appelée en JSONP.
-import { norm } from './util.js?v=10';
+import { norm } from './util.js?v=11';
 
 let n = 0;
 const jsonp = (path) => new Promise((resolve, reject) => {
