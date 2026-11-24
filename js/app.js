@@ -1,9 +1,9 @@
 // Party Games : accueil, profil, Quiz, Blind test et Devine le mot en solo ou en salon.
-import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=8';
-import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=8';
-import { fetchArtists } from './deezer.js?v=8';
-import { MOTS } from './mots.js?v=8';
-import { QUI_THEMES, PERSOS } from './qui.js?v=8';
+import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=9';
+import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=9';
+import { fetchArtists } from './deezer.js?v=9';
+import { MOTS } from './mots.js?v=9';
+import { QUI_THEMES, PERSOS } from './qui.js?v=9';
 
 const $ = (id) => document.getElementById(id);
 const view = () => $('view-game');
@@ -16,7 +16,7 @@ const backHome = `<a href="#accueil" class="btn ghost back">← Retour aux jeux<
 
 // Le réseau (Firebase) ne se charge que quand on joue en salon.
 let netP = null;
-const getNet = () => (netP = netP || import('./net.js?v=8'));
+const getNet = () => (netP = netP || import('./net.js?v=9'));
 
 // ---------- Profil ----------
 const store = {
@@ -438,7 +438,12 @@ const quiRead = (st, u) => {
 };
 // Ma fiche : la copie locale fait foi (évite de perdre un clic pendant l'envoi).
 const quiOf = (st, u) => (cur && cur.qm && u === cur.ctl.me ? cur.qm : quiRead(st, u));
-const quiSave = () => { if (cur && cur.qm) cur.ctl.guess(0, JSON.stringify(cur.qm)); };
+const quiSave = () => {
+  if (!cur || !cur.qm) return;
+  const c = cur, v = JSON.stringify(c.qm);
+  Promise.resolve((c.ctl.put || c.ctl.guess).call(c.ctl, 0, v)).then(() => { if (c.qerr) { c.qerr = ''; const e = $('qerr'); if (e) e.textContent = ''; } })
+    .catch((err) => { c.qerr = 'Ton action n’a pas été transmise à l’adversaire (le serveur Firebase l’a refusée). Vérifie les règles de la base de données.'; const e = $('qerr'); if (e) e.textContent = c.qerr; console.error('Qui est-ce : écriture refusée', err); });
+};
 
 const quiFlow = (st) => {
   const [A, B] = st.items.order, sa = quiOf(st, A), sb = quiOf(st, B);
@@ -563,7 +568,7 @@ const renderQui = (back, isHost) => {
         <div class="qboard${picking ? ' picking' : ''}" aria-label="Plateau : clique sur une personnalité pour la baisser ou la relever">${cards}</div>
         <aside class="qside">
           ${mine ? `<div class="secret">${face(mine)}<div><p class="note">Ta personnalité secrète</p><strong>${esc(mine.n)}</strong>${mine.s ? `<small>${esc(mine.s)}</small>` : ''}</div></div>` : ''}
-          <div class="qact" aria-live="polite">${act}</div>
+          <div class="qact" aria-live="polite">${act}<p class="err" id="qerr">${esc(cur.qerr || '')}</p></div>
         </aside>
         <div class="qinfo">
           <div><h2 class="sub">Joueurs</h2><ul class="plist">${plRows}</ul></div>

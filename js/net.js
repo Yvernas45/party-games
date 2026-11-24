@@ -76,6 +76,8 @@ export async function openRoom(code, me) {
     answer(i, v) { return set(ref(db, `rooms/${code}/answers/${i}/${uid}`), { v, t: now() }).catch(() => {}); },
     // Devine le mot : tous les essais de la manche, séparés par des virgules.
     guess(i, v) { return set(ref(db, `rooms/${code}/answers/${i}/${uid}`), { v, t: now() }).catch(() => {}); },
+    // Qui est-ce : même emplacement, mais l'erreur remonte pour pouvoir l'afficher.
+    put(i, v) { return set(ref(db, `rooms/${code}/answers/${i}/${uid}`), { v, t: now() }); },
     hostUpdate(patch) { return update(r, clean(patch)); }
   };
 }
