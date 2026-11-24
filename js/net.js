@@ -74,6 +74,8 @@ export async function openRoom(code, me) {
     subscribe(f) { listeners.push(f); },
     close() { unsub(); set(onlineRef, false).catch(() => {}); },
     answer(i, v) { return set(ref(db, `rooms/${code}/answers/${i}/${uid}`), { v, t: now() }).catch(() => {}); },
+    // Devine le mot : tous les essais de la manche, séparés par des virgules.
+    guess(i, v) { return set(ref(db, `rooms/${code}/answers/${i}/${uid}`), { v, t: now() }).catch(() => {}); },
     hostUpdate(patch) { return update(r, clean(patch)); }
   };
 }

@@ -1,18 +1,21 @@
-// Party Games : accueil, profil, Quiz et Blind test en solo ou en salon.
-import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=6';
-import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=6';
-import { fetchArtists } from './deezer.js?v=6';
+// Party Games : accueil, profil, Quiz, Blind test et Devine le mot en solo ou en salon.
+import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=7';
+import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=7';
+import { fetchArtists } from './deezer.js?v=7';
+import { MOTS } from './mots.js?v=7';
 
 const $ = (id) => document.getElementById(id);
 const view = () => $('view-game');
-const SECS = { quiz: 20, blind: 30 };
+const SECS = { quiz: 20, blind: 30, mot: 180 };
+const TITLES = { quiz: 'Quiz', blind: 'Blind test', mot: 'Devine le mot' };
+const BACKS = { quiz: 'quiz', blind: 'blind-test', mot: 'devine-le-mot' };
 const MODES = [['choice', '4 propositions'], ['typed', 'Réponse tapée'], ['mix', 'Mélange']];
 const COUNTS = [[5, '5'], [10, '10'], [20, '20']];
 const backHome = `<a href="#accueil" class="btn ghost back">← Retour aux jeux</a>`;
 
 // Le réseau (Firebase) ne se charge que quand on joue en salon.
 let netP = null;
-const getNet = () => (netP = netP || import('./net.js?v=6'));
+const getNet = () => (netP = netP || import('./net.js?v=7'));
 
 // ---------- Profil ----------
 const store = {
@@ -117,6 +120,7 @@ const localRoom = (game, cfg, items) => {
     subscribe(f) { ls.push(f); emit(); },
     close() { ls.length = 0; },
     answer(i, v) { st.answers[i] = st.answers[i] || {}; if (!st.answers[i][uid]) { st.answers[i][uid] = { v, t: Date.now() }; emit(); } },
+    guess(i, v) { st.answers[i] = st.answers[i] || {}; st.answers[i][uid] = { v, t: Date.now() }; emit(); },
     hostUpdate(patch) { Object.entries(patch).forEach(([k, v]) => setPath(st, k, v)); emit(); return Promise.resolve(); }
   };
 };
@@ -265,6 +269,153 @@ const blindSetup = (focusSel) => {
   };
 };
 
+// ---------- Devine le mot ----------
+const MAX_TRIES = 6;
+const MLENS = [[5, '5 lettres'], [6, '6 lettres'], [7, '7 lettres']];
+const MCOUNTS = [[1, '1'], [3, '3'], [5, '5'], [10, '10']];
+const mot = { cfg: loadCfg('pg-mot', { len: 5, count: 3 }) };
+if (!MOTS[mot.cfg.len]) mot.cfg.len = 5;
+if (![1, 3, 5, 10].includes(mot.cfg.count)) mot.cfg.count = 3;
+const motItems = (cfg) => shuffle(MOTS[cfg.len] || MOTS[5]).slice(0, cfg.count).map(w => ({ w }));
+const motLetter = (k) => (k || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+
+// Essais d'un joueur pour la manche i (stockés « MAISON,PORTE,… »).
+const motGuesses = (st, i, uid) => { const a = ((st.answers || {})[i] || {})[uid]; return a && a.v ? String(a.v).split(',') : []; };
+// c = bien placée, p = présente ailleurs, a = absente (les lettres en double sont comptées correctement).
+const motColors = (g, w) => {
+  const res = Array(w.length).fill('a'), left = {};
+  for (let k = 0; k < w.length; k++) { if (g[k] === w[k]) res[k] = 'c'; else left[w[k]] = (left[w[k]] || 0) + 1; }
+  for (let k = 0; k < w.length; k++) if (res[k] !== 'c' && left[g[k]] > 0) { res[k] = 'p'; left[g[k]]--; }
+  return res;
+};
+// Gagnant de la manche : celui qui a trouvé le plus tôt.
+const motWinner = (st, i) => {
+  const w = st.items[i].w; let best = null;
+  Object.entries((st.answers || {})[i] || {}).forEach(([u, a]) => {
+    if (a && a.v && String(a.v).split(',').includes(w) && (!best || a.t < best.t)) best = { uid: u, t: a.t, tries: String(a.v).split(',').length };
+  });
+  return best;
+};
+const motPoints = (tries, elapsed) => 100 + (MAX_TRIES - tries) * 20 + Math.round(Math.max(0, SECS.mot - elapsed) / SECS.mot * 50);
+
+const motSetup = (focusSel) => {
+  const c = mot.cfg;
+  view().innerHTML = `${backHome}
+    <div class="ghead"><h1>Devine le mot</h1><p class="desc">Trouve le mot secret en ${MAX_TRIES} essais. En salon, tout le monde cherche le même mot : le premier qui trouve gagne la manche.</p></div>
+    <div class="setup">
+      <fieldset><legend>Longueur du mot</legend><div class="toggles">${toggles(MLENS, 'len', k => c.len === k)}</div></fieldset>
+      <fieldset><legend>Nombre de mots</legend><div class="toggles">${toggles(MCOUNTS, 'count', k => c.count === k)}</div></fieldset>
+      <div class="row-end">
+        <button class="btn" type="button" id="solo">Jouer en solo</button>
+        <button class="btn ghost" type="button" id="multi">Créer un salon</button>
+        <p class="note">${c.count} mot${c.count > 1 ? 's' : ''} de ${c.len} lettres · ${MAX_TRIES} essais · ${SECS.mot / 60} minutes par mot</p>
+      </div>
+      <p class="err" id="setup-err" aria-live="polite"></p>
+    </div>`;
+  if (focusSel) { const f = view().querySelector(focusSel); if (f) f.focus(); }
+  view().onclick = (e) => {
+    const b = e.target.closest('button'); if (!b || b.disabled) return;
+    if (b.dataset.len) { c.len = +b.dataset.len; saveCfg('pg-mot', c); motSetup(`[data-len="${c.len}"]`); return; }
+    if (b.dataset.count) { c.count = +b.dataset.count; saveCfg('pg-mot', c); motSetup(`[data-count="${c.count}"]`); return; }
+    if (b.id === 'solo') { saveCfg('pg-mot', c); startSolo('mot', c, motItems(c)); }
+    else if (b.id === 'multi') { saveCfg('pg-mot', c); createRoom('mot', c, motItems(c), b); }
+  };
+};
+
+const KB = ['AZERTYUIOP', 'QSDFGHJKLM', 'WXCVBN'];
+const tileRow = (letters, L, colors, extra) => `<div class="wrow"${extra || ''}>${Array.from({ length: L }, (_, k) => `<span class="tile${colors ? ' ' + colors[k] : letters[k] ? ' typed' : ''}">${letters[k] ? esc(letters[k]) : ''}</span>`).join('')}</div>`;
+
+const renderMot = (back, isHost) => {
+  const { ctl, st } = cur;
+  const i = st.round.i, item = st.items[i], L = item.w.length, total = st.items.length;
+  const reveal = st.round.phase === 'reveal';
+  const mine = motGuesses(st, i, ctl.me);
+  const found = mine.includes(item.w);
+  const over = reveal || found || mine.length >= MAX_TRIES;
+  const rk = `${i}|${st.round.startAt}`;
+  if (cur.typedFor !== rk) { cur.typedFor = rk; cur.typed = ''; }
+  if (over) cur.typed = '';
+
+  let rows = '';
+  for (let r = 0; r < MAX_TRIES; r++) {
+    if (r < mine.length) rows += tileRow(mine[r], L, motColors(mine[r], item.w));
+    else if (r === mine.length && !over) rows += tileRow(cur.typed, L, null, ' id="cur-row"');
+    else rows += tileRow('', L, null);
+  }
+  const best = {};
+  const rank = { c: 3, p: 2, a: 1 };
+  mine.forEach(g => motColors(g, item.w).forEach((c, k) => { if (!best[g[k]] || rank[c] > rank[best[g[k]]]) best[g[k]] = c; }));
+  const kb = KB.map((row, n) => `<div class="krow">${n === 2 ? '<button type="button" class="key wide" data-key="ENTER">Entrée</button>' : ''}${[...row].map(l => `<button type="button" class="key ${best[l] || ''}" data-key="${l}">${l}</button>`).join('')}${n === 2 ? '<button type="button" class="key wide" data-key="BACK" aria-label="Effacer">⌫</button>' : ''}</div>`).join('');
+
+  let fb = '', fbCls = '';
+  if (reveal) {
+    const mw = motWinner(st, i), win = mw && mw.uid;
+    const wp = win && (st.players || {})[win];
+    if (win === ctl.me) { fbCls = 'ok'; fb = ctl.local ? `Trouvé en ${mine.length} essai${mine.length > 1 ? 's' : ''}, +${((st.players || {})[ctl.me] || {}).last || 0} points.` : `Tu as trouvé en premier ! +${((st.players || {})[ctl.me] || {}).last || 0} points.`; }
+    else if (wp) { fbCls = 'ko'; fb = `${wp.name} a trouvé en premier. Le mot était : ${item.w}.`; }
+    else { fbCls = 'ko'; fb = `${ctl.local ? 'Raté' : 'Personne n’a trouvé'}. Le mot était : ${item.w}.`; }
+  } else if (found) fb = 'Trouvé !';
+  else if (mine.length >= MAX_TRIES) { fbCls = 'ko'; fb = 'Plus d’essais. Attends la fin de la manche.'; }
+
+  const last = i + 1 >= total;
+  view().innerHTML = `${back}
+    <div class="play mot" id="play">
+      <div class="hud"><span>Mot ${i + 1} / ${total} · ${L} lettres${ctl.code ? ` · salon ${esc(ctl.code)}` : ''}</span><span id="pts"></span></div>
+      <div class="timer" aria-hidden="true"><i id="bar"${reveal ? ' style="width:0"' : ''}></i></div>
+      <div class="countdown hidden" id="countdown" aria-live="polite"></div>
+      <div class="motwrap">
+        <div class="qa">
+          <div class="wgrid" style="--L:${L}" aria-label="Grille de jeu">${rows}</div>
+          <p class="fb ${fbCls}" id="fb" aria-live="polite">${esc(fb)}</p>
+          ${over ? '' : `<div class="kb" id="kb">${kb}</div>`}
+        </div>
+        ${ctl.local ? '' : `<div><h2 class="sub" style="margin-top:0">${reveal ? 'Classement' : 'Adversaires'}</h2><ol class="plist${reveal ? ' board' : ''}" id="${reveal ? 'board' : 'rivals'}"></ol></div>`}
+      </div>
+      <div class="row-end" id="nx">${reveal ? (isHost ? `<button class="btn" type="button" id="next">${last ? 'Voir le résultat' : 'Mot suivant'}</button>` : '<p class="note">La personne qui a créé le salon passe à la suite.</p>') : ''}</div>
+    </div>`;
+
+  view().onclick = (e) => { const k = e.target.closest('[data-key]'); if (k) motKey(k.dataset.key); };
+  const nb = $('next');
+  if (nb) {
+    nb.onclick = () => {
+      nb.disabled = true;
+      if (last) ctl.hostUpdate({ status: 'ended' });
+      else ctl.hostUpdate({ round: { i: i + 1, phase: 'question', startAt: ctl.now() + (ctl.local ? 800 : 2000) } });
+    };
+    nb.focus();
+  }
+};
+
+const motKey = (key) => {
+  if (!cur || !cur.st || cur.st.game !== 'mot') return;
+  const { ctl, st } = cur;
+  if (st.status !== 'playing' || st.round.phase !== 'question' || ctl.now() < st.round.startAt) return;
+  const i = st.round.i, w = st.items[i].w;
+  const mine = motGuesses(st, i, ctl.me);
+  if (mine.includes(w) || mine.length >= MAX_TRIES) return;
+  const fb = $('fb');
+  if (key === 'BACK') cur.typed = cur.typed.slice(0, -1);
+  else if (key === 'ENTER') {
+    if (cur.typed.length < w.length) { if (fb) { fb.className = 'fb ko'; fb.textContent = `Le mot fait ${w.length} lettres.`; } return; }
+    if (cur.sentAt === `${i}|${mine.length}`) return;
+    cur.sentAt = `${i}|${mine.length}`;
+    const g = cur.typed; cur.typed = '';
+    ctl.guess(i, [...mine, g].join(','));
+    return;
+  } else if (/^[A-Z]$/.test(key) && cur.typed.length < w.length) cur.typed += key;
+  if (fb) { fb.className = 'fb'; fb.textContent = ''; }
+  const row = $('cur-row');
+  if (row) row.querySelectorAll('.tile').forEach((t, k) => { t.textContent = cur.typed[k] || ''; t.classList.toggle('typed', !!cur.typed[k]); });
+};
+
+document.addEventListener('keydown', (e) => {
+  if (!cur || !cur.st || cur.st.game !== 'mot' || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target.closest && e.target.closest('input, textarea')) return;
+  if (e.key === 'Enter') { if (e.target.closest && e.target.closest('button') && !e.target.closest('[data-key]')) return; e.preventDefault(); motKey('ENTER'); }
+  else if (e.key === 'Backspace') { e.preventDefault(); motKey('BACK'); }
+  else { const l = motLetter(e.key); if (/^[A-Z]$/.test(l)) motKey(l); }
+});
+
 // ---------- Salons ----------
 let cur = null; // { ctl, st, key }
 
@@ -276,7 +427,7 @@ const leaveRoom = () => {
 const startSolo = (game, cfg, items) => {
   leaveRoom();
   const ctl = localRoom(game, cfg, items);
-  cur = { ctl, st: null, key: '', back: game === 'quiz' ? 'quiz' : 'blind-test' };
+  cur = { ctl, st: null, key: '', back: BACKS[game] };
   ctl.subscribe((st) => onState(st));
 };
 
@@ -317,7 +468,7 @@ const onState = (st) => {
   if (!cur) return;
   cur.st = st;
   const me = cur.ctl.me;
-  const answered = !!answersAt(st, st.round.i)[me];
+  const answered = st.game === 'mot' ? motGuesses(st, st.round.i, me).length : !!answersAt(st, st.round.i)[me];
   const key = [st.status, st.round.i, st.round.phase, st.round.startAt, answered].join('|');
   if (key !== cur.key) { cur.key = key; renderRoom(); }
   updateDynamic();
@@ -327,7 +478,8 @@ const renderRoom = () => {
   const { ctl, st } = cur;
   const isHost = st.host === ctl.me;
   const quizMode = st.game === 'quiz';
-  const title = quizMode ? 'Quiz' : 'Blind test';
+  const title = TITLES[st.game] || 'Partie';
+  const motMode = st.game === 'mot';
   const back = ctl.local ? `<button type="button" class="btn ghost back" data-setup>← Réglages</button>` : `<a href="#accueil" class="btn ghost back">← Quitter le salon</a>`;
   view().onclick = null; view().oninput = null; view().onchange = null; view().onkeydown = null;
 
@@ -345,10 +497,10 @@ const renderRoom = () => {
           <p class="note" id="copy-msg" aria-live="polite"></p>
         </div>
         <div>
-          <div class="ghead" style="margin-top:0"><h1>${title}</h1><p class="desc">${n} ${quizMode ? 'question' : 'morceau'}${n > 1 ? (quizMode ? 's' : 'x') : ''} · ${SECS[st.game]} secondes chacun${quizMode ? 'e' : ''}</p></div>
+          <div class="ghead" style="margin-top:0"><h1>${title}</h1><p class="desc">${motMode ? `${n} mot${n > 1 ? 's' : ''} de ${(st.cfg || {}).len || 5} lettres · ${MAX_TRIES} essais · le premier qui trouve gagne la manche` : `${n} ${quizMode ? 'question' : 'morceau'}${n > 1 ? (quizMode ? 's' : 'x') : ''} · ${SECS[st.game]} secondes chacun${quizMode ? 'e' : ''}`}</p></div>
           <h2 class="sub">Joueurs</h2>
           <ul class="plist" id="plist"></ul>
-          ${!quizMode ? '<button class="btn ghost" type="button" id="unlock">Activer le son sur cet appareil</button>' : ''}
+          ${st.game === 'blind' ? '<button class="btn ghost" type="button" id="unlock">Activer le son sur cet appareil</button>' : ''}
           <div class="row-end" style="margin-top:16px">${isHost ? '<button class="btn" type="button" id="start">Lancer la partie</button><p class="note">Lance quand tout le monde est là.</p>' : '<p class="note">En attente du lancement par la personne qui a créé le salon.</p>'}</div>
         </div>
       </div>`;
@@ -362,6 +514,7 @@ const renderRoom = () => {
   }
 
   if (st.status === 'ended') { renderEnd(back, isHost); return; }
+  if (motMode) { renderMot(back, isHost); return; }
 
   const i = st.round.i, item = st.items[i], total = st.items.length;
   const reveal = st.round.phase === 'reveal';
@@ -433,12 +586,19 @@ const renderEnd = (back, isHost) => {
   const { ctl, st } = cur;
   stopAudio();
   const quizMode = st.game === 'quiz';
+  const motMode = st.game === 'mot';
   const me = ctl.me;
   const rows = (st.items || []).map((it, i) => {
+    if (motMode) {
+      const g = motGuesses(st, i, me), mw = motWinner(st, i), win = mw && mw.uid, wp = win && (st.players || {})[win];
+      const got = g.includes(it.w);
+      return { q: it.w, given: g.length ? (got ? `Trouvé en ${g.length}` : `${g.length} essai${g.length > 1 ? 's' : ''}`) : '', res: ctl.local ? (got ? 'Trouvé' : 'Raté') : (wp ? wp.name : 'Personne'), ok: win === me };
+    }
     const a = answersAt(st, i)[me];
     const r = grade(st.game, it, a ? a.v : null, 0);
     return { q: quizMode ? it.q : it.label, given: a ? a.v : '', res: quizMode ? it.a : r.res, ok: r.ok };
   });
+  const cols = motMode ? ['Mot', 'Tes essais', ctl.local ? 'Résultat' : 'Gagnant'] : quizMode ? ['Question', 'Ta réponse', 'Bonne réponse'] : ['Morceau', 'Ta réponse', 'Résultat'];
   const rank = ranking(st);
   const mineP = (st.players || {})[me] || { score: 0 };
   const good = rows.filter(r => r.ok).length;
@@ -448,7 +608,7 @@ const renderEnd = (back, isHost) => {
       <div>
         <p class="note">${ctl.local ? 'Score final' : `Tu termines ${pos === 1 ? '1er' : pos + 'e'} sur ${rank.length}`}</p>
         <div class="result-big">${mineP.score || 0}</div>
-        <p class="desc">${good} sur ${rows.length} ${quizMode ? 'bonne' + (good > 1 ? 's' : '') + ' réponse' + (good > 1 ? 's' : '') : 'morceau' + (good > 1 ? 'x' : '') + ' trouvé' + (good > 1 ? 's' : '')}</p>
+        <p class="desc">${good} sur ${rows.length} ${motMode ? (ctl.local ? 'mot' + (good > 1 ? 's' : '') + ' trouvé' + (good > 1 ? 's' : '') : 'manche' + (good > 1 ? 's' : '') + ' gagnée' + (good > 1 ? 's' : '')) : quizMode ? 'bonne' + (good > 1 ? 's' : '') + ' réponse' + (good > 1 ? 's' : '') : 'morceau' + (good > 1 ? 'x' : '') + ' trouvé' + (good > 1 ? 's' : '')}</p>
         <div class="row-end">${isHost ? '<button class="btn" type="button" id="again">Rejouer</button>' : '<p class="note">La personne qui a créé le salon peut relancer une partie.</p>'}${ctl.local ? '<button type="button" class="btn ghost" data-setup>Changer les réglages</button>' : ''}</div>
         <p class="err" id="end-err" aria-live="polite"></p>
       </div>
@@ -456,8 +616,8 @@ const renderEnd = (back, isHost) => {
         ${ctl.local ? '' : `<h2 class="sub">Classement final</h2><ol class="plist board">${rank.map((p, k) => playerRow(p, me, `<span class="sc">${p.score || 0} pts</span>`).replace('<li', `<li data-rank="${k + 1}"`)).join('')}</ol>`}
         <h2 class="sub">Tes réponses</h2>
         <div class="scroll"><table class="stack">
-          <thead><tr><th>${quizMode ? 'Question' : 'Morceau'}</th><th>Ta réponse</th><th>${quizMode ? 'Bonne réponse' : 'Résultat'}</th></tr></thead>
-          <tbody>${rows.map(r => `<tr class="${r.ok ? 'ok' : 'ko'}"><td data-l="${quizMode ? 'Question' : 'Morceau'}">${esc(r.q)}</td><td data-l="Ta réponse">${r.given ? esc(r.given) : '<span class="note">Pas de réponse</span>'}</td><td data-l="${quizMode ? 'Bonne réponse' : 'Résultat'}">${esc(r.res)}</td></tr>`).join('')}</tbody>
+          <thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead>
+          <tbody>${rows.map(r => `<tr class="${r.ok ? 'ok' : 'ko'}"><td data-l="${cols[0]}">${esc(r.q)}</td><td data-l="${cols[1]}">${r.given ? esc(r.given) : `<span class="note">${motMode ? 'Aucun essai' : 'Pas de réponse'}</span>`}</td><td data-l="${cols[2]}">${esc(r.res)}</td></tr>`).join('')}</tbody>
         </table></div>
       </div>
     </div>`;
@@ -466,6 +626,7 @@ const renderEnd = (back, isHost) => {
     ag.disabled = true;
     let items;
     if (quizMode) items = quizItems(st.cfg);
+    else if (motMode) items = motItems(st.cfg);
     else {
       const pool = ctl.local ? currentPool() : await (async () => { blind.cfg = Object.assign({}, blind.cfg, st.cfg); try { return await loadDeezer(); } catch (e) { return []; } })();
       if (!pool.length) { $('end-err').textContent = 'Impossible de recharger les morceaux.'; ag.disabled = false; return; }
@@ -487,9 +648,18 @@ const updateDynamic = () => {
   if (pl && st.status === 'lobby') pl.innerHTML = ranking(st).sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0)).map(p => playerRow(p, me, p.uid === st.host ? '<span class="sc">hôte</span>' : '')).join('');
   const pts = $('pts'); if (pts) pts.textContent = (((st.players || {})[me] || {}).score || 0) + ' pts';
   const w = $('waiting');
-  if (w && st.status === 'playing' && !ctl.local) {
+  if (w && st.status === 'playing' && !ctl.local && st.game !== 'mot') {
     const on = onlineUids(st), ans = answersAt(st, st.round.i);
     w.textContent = st.round.phase === 'question' ? `${on.filter(u => ans[u]).length} / ${on.length} joueur${on.length > 1 ? 's ont' : ' a'} répondu` : '';
+  }
+  const rv = $('rivals');
+  if (rv && st.game === 'mot' && st.status === 'playing') {
+    const i = st.round.i, wd = st.items[i].w;
+    rv.innerHTML = ranking(st).filter(p => p.uid !== me).map(p => {
+      const g = motGuesses(st, i, p.uid);
+      const mini = `<span class="mini" style="--L:${wd.length}">${g.map(x => motColors(x, wd).map(c => `<i class="${c}"></i>`).join('')).join('')}</span>`;
+      return playerRow(p, me, `${mini}<span class="sc">${g.length}/${MAX_TRIES}</span>`);
+    }).join('') || '<li><span class="pn note">En attente d’autres joueurs</span></li>';
   }
   const bd = $('board');
   if (bd) bd.innerHTML = ranking(st).map((p, k) => playerRow(p, me, `<span class="sc">${p.last ? `<small>+${p.last}</small> ` : ''}${p.score || 0} pts</span>`).replace('<li', `<li data-rank="${k + 1}"`)).join('');
@@ -510,6 +680,21 @@ setInterval(() => {
   if (!pending && st.game === 'blind') playItem(`${ctl.code}|${st.round.startAt}`, st.items[st.round.i]);
   if (st.host === ctl.me && !pending) {
     const on = onlineUids(st), ans = answersAt(st, st.round.i);
+    if (st.game === 'mot') {
+      const i = st.round.i, win = motWinner(st, i);
+      const allDone = on.length > 0 && on.every(u => motGuesses(st, i, u).length >= MAX_TRIES);
+      if ((el >= sec || win || allDone) && cur.revealed !== st.round.startAt) {
+        cur.revealed = st.round.startAt;
+        const patch = { 'round/phase': 'reveal' };
+        Object.entries(st.players || {}).forEach(([u, p]) => {
+          const pts = win && win.uid === u ? motPoints(win.tries, (win.t - st.round.startAt) / 1000) : 0;
+          patch[`players/${u}/score`] = (p.score || 0) + pts;
+          patch[`players/${u}/last`] = pts;
+        });
+        ctl.hostUpdate(patch);
+      }
+      return;
+    }
     const all = on.length > 0 && on.every(u => ans[u]);
     if ((el >= sec || all) && cur.revealed !== st.round.startAt) {
       cur.revealed = st.round.startAt;
@@ -562,7 +747,7 @@ const route = () => {
   v.classList.toggle('hidden', !inGame);
   if (roomCode) { joinRoom(roomCode.toUpperCase()); document.title = 'Salon · Party Games'; }
   else if (g) {
-    if (g.id === 'quiz') quizSetup(); else if (g.id === 'blind-test') { blindSetup(); if (!currentPool().length && !blind.loading) loadDeezer(); }
+    if (g.id === 'quiz') quizSetup(); else if (g.id === 'devine-le-mot') motSetup(); else if (g.id === 'blind-test') { blindSetup(); if (!currentPool().length && !blind.loading) loadDeezer(); }
     else renderGame(g);
     document.title = g.name + ' · Party Games';
   } else document.title = 'Party Games';

@@ -55,8 +55,8 @@ const GAMES = [
     rules: ['Sélectionne les thèmes avant la partie.', 'Réponds parmi 4 propositions ou en tapant ta réponse.', 'Les petites fautes d’orthographe sont acceptées.', 'Les réponses rapides rapportent plus de points.'] },
   { id: 'blind-test', name: 'Blind test', desc: 'Reconnais le titre ou l’artiste à partir d’un extrait de 30 secondes.', players: 'Solo ou multijoueur', step: 'Étape 2', ready: true,
     rules: ['Un extrait de 30 secondes est diffusé.', 'Trouve le titre, l’artiste, ou les deux.', 'Réponse à choix ou tapée, petites fautes acceptées.', 'Les réponses rapides rapportent plus de points.'] },
-  { id: 'devine-le-mot', name: 'Devine le mot', desc: 'Fais deviner un mot à ton équipe sans utiliser les mots interdits.', players: '3 joueurs ou plus', step: 'Étape 5',
-    rules: ['Un joueur reçoit un mot secret.', 'Il le fait deviner à son équipe avec des indices.', 'Certains mots sont interdits dans les indices.', 'Un point par mot trouvé avant la fin du temps.'] }
+  { id: 'devine-le-mot', name: 'Devine le mot', desc: 'Trouve le mot secret en 6 essais. En salon, le premier qui trouve gagne la manche.', players: 'Solo ou multijoueur', step: 'Étape 3', ready: true,
+    rules: ['Propose un mot de la bonne longueur.', 'Vert : bonne lettre bien placée. Jaune : lettre présente ailleurs. Gris : absente.', 'Tu as 6 essais par mot.', 'En salon, le premier qui trouve remporte la manche.'] }
 ];
 
 const THEMES = [['kpop', 'K-pop'], ['series', 'Séries'], ['films', 'Films'], ['culture', 'Culture générale']];
