@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Party Games</title>
+<meta name="description" content="Mini-jeux entre amis : quiz, blind test, Qui est-ce.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="logo" href="#accueil" aria-label="Party Games, accueil">
+      <svg viewBox="0 0 28 28" aria-hidden="true"><rect x="1" y="1" width="26" height="26" rx="7" fill="currentColor"/><rect x="8" y="8" width="12" height="12" rx="3" fill="#e8642c"/></svg>
+      Party Games
+    </a>
+    <button class="chip hidden" id="chip" type="button" aria-label="Modifier mon profil"></button>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="view-home">
+    <div class="player">
+      <div id="intro"></div>
+      <form id="profile" novalidate>
+        <label for="pseudo">Pseudo</label>
+        <input type="text" id="pseudo" maxlength="16" autocomplete="nickname" placeholder="ex. Mina">
+        <p class="err" id="err" aria-live="polite"></p>
+        <span class="lbl">Avatar</span>
+        <div class="avatars" id="avatars" role="group" aria-label="Choix de l'avatar"></div>
+        <button class="btn" type="submit">Continuer</button>
+      </form>
+      <div class="join hidden" id="join">
+        <span class="lbl">Rejoindre une partie</span>
+        <form class="row" id="join-form" novalidate>
+          <input type="text" id="code" maxlength="5" placeholder="CODE" aria-label="Code du salon" autocomplete="off" autocapitalize="characters">
+          <button class="btn" type="submit">Rejoindre</button>
+        </form>
+        <p class="err" id="join-err" aria-live="polite"></p>
+        <p class="note">Demande le code à la personne qui a créé le salon.</p>
+      </div>
+    </div>
+
+    <section class="shelf" aria-labelledby="shelf-title">
+      <div class="shelf-head">
+        <h2 id="shelf-title">Jeux</h2>
+        <p class="note">2 jeux jouables · 2 en préparation</p>
+      </div>
+      <div class="grid" id="grid"></div>
+    </section>
+  </section>
+
+  <section id="view-game" class="game hidden" aria-live="polite"></section>
+</main>
+
+<footer>
+  <div class="wrap">Party Games</div>
+</footer>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
