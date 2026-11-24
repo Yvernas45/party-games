@@ -1,7 +1,7 @@
 // Party Games : accueil, profil, Quiz et Blind test en solo ou en salon.
-import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js';
-import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js';
-import { fetchArtists } from './deezer.js';
+import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=4';
+import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=4';
+import { fetchArtists } from './deezer.js?v=4';
 
 const $ = (id) => document.getElementById(id);
 const view = () => $('view-game');
@@ -12,7 +12,7 @@ const backHome = `<a href="#accueil" class="btn ghost back">← Retour aux jeux<
 
 // Le réseau (Firebase) ne se charge que quand on joue en salon.
 let netP = null;
-const getNet = () => (netP = netP || import('./net.js'));
+const getNet = () => (netP = netP || import('./net.js?v=4'));
 
 // ---------- Profil ----------
 const store = {
