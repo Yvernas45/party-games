@@ -1,7 +1,7 @@
 // Party Games : accueil, profil, Quiz et Blind test en solo ou en salon.
-import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=4';
-import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=4';
-import { fetchArtists } from './deezer.js?v=4';
+import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=5';
+import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=5';
+import { fetchArtists } from './deezer.js?v=5';
 
 const $ = (id) => document.getElementById(id);
 const view = () => $('view-game');
@@ -12,7 +12,7 @@ const backHome = `<a href="#accueil" class="btn ghost back">← Retour aux jeux<
 
 // Le réseau (Firebase) ne se charge que quand on joue en salon.
 let netP = null;
-const getNet = () => (netP = netP || import('./net.js?v=4'));
+const getNet = () => (netP = netP || import('./net.js?v=5'));
 
 // ---------- Profil ----------
 const store = {
@@ -227,9 +227,9 @@ const blindSetup = (focusSel) => {
   view().innerHTML = `${backHome}
     <div class="ghead"><h1>Blind test</h1><p class="desc">Reconnais le titre ou l'artiste à partir d'un extrait de ${SECS.blind} secondes.</p></div>
     <div class="setup">
-      <fieldset><legend>Genres</legend>
+      <fieldset><legend>Genres <small class="note">· plusieurs choix possibles, clique à nouveau pour retirer</small></legend>
         <div class="toggles">${GENRES.map(([k, name]) => `<button type="button" class="tg" data-genre="${k}" aria-pressed="${c.genres.includes(k)}">${name}</button>`).join('')}</div>
-        <p class="note" style="margin-top:10px">${blind.loading ? 'Chargement des morceaux…' : ready ? `${pool.length} extraits prêts · choisis un ou plusieurs genres` : 'Choisis un ou plusieurs genres.'}</p>
+        <p class="note" style="margin-top:10px">${blind.loading ? 'Chargement des morceaux…' : ready ? `${pool.length} extraits prêts · ${c.genres.map(g => GENRES.find(x => x[0] === g)[1]).join(' + ')}` : 'Choisis un ou plusieurs genres.'}</p>
         ${blind.msg ? `<p class="err" style="margin-top:6px" aria-live="polite">${esc(blind.msg)}</p>` : ''}
       </fieldset>
       <fieldset><legend>Réponses</legend><div class="toggles">${toggles(MODES, 'mode', k => c.mode === k)}</div></fieldset>

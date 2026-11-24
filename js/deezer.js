@@ -1,5 +1,5 @@
 // Extraits Deezer : API publique, sans compte, appelée en JSONP.
-import { norm } from './util.js?v=4';
+import { norm } from './util.js?v=5';
 
 let n = 0;
 const jsonp = (path) => new Promise((resolve, reject) => {
@@ -52,6 +52,8 @@ export async function fetchArtists(names, perArtist) {
   const seen = new Set();
   const out = lists.flatMap((d, k) => (d.data || []).map(t => Object.assign({}, t, { _q: names[k] })))
     .filter(t => t && t.preview && t.readable !== false)
+    // Deezer renvoie parfois des artistes au nom proche (ex. « IVE » → « Live ») : on ne garde que le bon.
+    .filter(t => t.artist && norm(t.artist.name) === norm(t._q))
     .map(t => Object.assign(toTrack(t), { from: t._q }))
     .filter(t => { const k = norm(t.title) + '|' + norm(t.artist); if (!t.title || seen.has(k)) return false; seen.add(k); return true; });
   if (!out.length && lists.length) throw new Error('empty');
