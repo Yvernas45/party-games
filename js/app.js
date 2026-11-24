@@ -1,21 +1,22 @@
 // Party Games : accueil, profil, Quiz, Blind test et Devine le mot en solo ou en salon.
-import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=7';
-import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=7';
-import { fetchArtists } from './deezer.js?v=7';
-import { MOTS } from './mots.js?v=7';
+import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=8';
+import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=8';
+import { fetchArtists } from './deezer.js?v=8';
+import { MOTS } from './mots.js?v=8';
+import { QUI_THEMES, PERSOS } from './qui.js?v=8';
 
 const $ = (id) => document.getElementById(id);
 const view = () => $('view-game');
 const SECS = { quiz: 20, blind: 30, mot: 180 };
-const TITLES = { quiz: 'Quiz', blind: 'Blind test', mot: 'Devine le mot' };
-const BACKS = { quiz: 'quiz', blind: 'blind-test', mot: 'devine-le-mot' };
+const TITLES = { quiz: 'Quiz', blind: 'Blind test', mot: 'Devine le mot', qui: 'Qui est-ce ?' };
+const BACKS = { quiz: 'quiz', blind: 'blind-test', mot: 'devine-le-mot', qui: 'qui-est-ce' };
 const MODES = [['choice', '4 propositions'], ['typed', 'Réponse tapée'], ['mix', 'Mélange']];
 const COUNTS = [[5, '5'], [10, '10'], [20, '20']];
 const backHome = `<a href="#accueil" class="btn ghost back">← Retour aux jeux</a>`;
 
 // Le réseau (Firebase) ne se charge que quand on joue en salon.
 let netP = null;
-const getNet = () => (netP = netP || import('./net.js?v=7'));
+const getNet = () => (netP = netP || import('./net.js?v=8'));
 
 // ---------- Profil ----------
 const store = {
@@ -416,6 +417,196 @@ document.addEventListener('keydown', (e) => {
   else { const l = motLetter(e.key); if (/^[A-Z]$/.test(l)) motKey(l); }
 });
 
+// ---------- Qui est-ce ----------
+// Chaque joueur n'écrit que sa propre fiche (answers/0/<uid>) : personnages baissés, questions posées,
+// réponses données et proposition finale. Le tour de jeu se déduit des deux fiches.
+const QSIZES = [[16, '16'], [24, '24'], [30, '30']];
+const qui = { cfg: loadCfg('pg-qui', { themes: ['kpop'], size: 24 }) };
+qui.cfg.themes = (Array.isArray(qui.cfg.themes) ? qui.cfg.themes : []).filter(t => PERSOS[t]);
+if (!qui.cfg.themes.length) qui.cfg.themes = ['kpop'];
+if (![16, 24, 30].includes(qui.cfg.size)) qui.cfg.size = 24;
+const quiPool = (cfg) => (cfg.themes || []).flatMap(t => PERSOS[t] || []);
+const quiItems = (cfg) => ({ board: shuffle(quiPool(cfg)).slice(0, cfg.size).map(p => ({ n: p.n, s: p.s || '', img: p.img || '' })) });
+const quiDeal = (board, order) => { const [x, y] = shuffle(board.map((_, k) => k)); return { board, order, secrets: { [order[0]]: x, [order[1]]: y } }; };
+const quiPair = (st) => Object.entries(st.players || {}).filter(([, p]) => p.online !== false)
+  .sort((a, b) => (a[1].joinedAt || 0) - (b[1].joinedAt || 0)).slice(0, 2).map(([u]) => u);
+
+const quiRead = (st, u) => {
+  const a = (((st.answers || {})[0]) || {})[u]; let v = {};
+  try { v = a && a.v ? JSON.parse(a.v) : {}; } catch (e) { v = {}; }
+  return { down: v.down || [], qs: v.qs || [], rs: v.rs || [], g: Number.isInteger(v.g) ? v.g : null };
+};
+// Ma fiche : la copie locale fait foi (évite de perdre un clic pendant l'envoi).
+const quiOf = (st, u) => (cur && cur.qm && u === cur.ctl.me ? cur.qm : quiRead(st, u));
+const quiSave = () => { if (cur && cur.qm) cur.ctl.guess(0, JSON.stringify(cur.qm)); };
+
+const quiFlow = (st) => {
+  const [A, B] = st.items.order, sa = quiOf(st, A), sb = quiOf(st, B);
+  const g = sa.g !== null ? A : sb.g !== null ? B : null;
+  if (g) {
+    const opp = g === A ? B : A, pick = (g === A ? sa : sb).g, ok = pick === st.items.secrets[opp];
+    return { kind: 'end', guesser: g, winner: ok ? g : opp, ok, pick };
+  }
+  if (sa.qs.length > sb.rs.length) return { kind: 'answer', who: B, asker: A, q: sa.qs[sb.rs.length] };
+  if (sb.qs.length > sa.rs.length) return { kind: 'answer', who: A, asker: B, q: sb.qs[sa.rs.length] };
+  return { kind: 'ask', who: sa.qs.length === sb.qs.length ? A : B };
+};
+
+const quiLog = (st) => {
+  const [A, B] = st.items.order, sa = quiOf(st, A), sb = quiOf(st, B), out = [];
+  for (let k = 0; k < Math.max(sa.qs.length, sb.qs.length); k++) {
+    if (sa.qs[k] !== undefined) out.push({ u: A, q: sa.qs[k], r: sb.rs[k] });
+    if (sb.qs[k] !== undefined) out.push({ u: B, q: sb.qs[k], r: sa.rs[k] });
+  }
+  return out;
+};
+
+const initials = (n) => n.replace(/[’'-]/g, ' ').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+const hueOf = (n) => [...n].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+const face = (p) => `<span class="face">${p.img ? `<img src="${esc(p.img)}" alt="" loading="lazy">` : `<span class="ini" style="--h:${hueOf(p.n)}">${esc(initials(p.n))}</span>`}</span>`;
+const persoCard = (p, k, cls, dis) => `<button type="button" class="pc${cls}" data-p="${k}"${dis ? ' disabled' : ''}>${face(p)}<span class="nm">${esc(p.n)}</span>${p.s ? `<small>${esc(p.s)}</small>` : ''}</button>`;
+const ansCls = (r) => (r === 'Oui' ? 'oui' : r === 'Non' ? 'non' : '');
+
+const quiSetup = (focusSel) => {
+  const c = qui.cfg, avail = quiPool(c).length, n = Math.min(avail, c.size);
+  view().innerHTML = `${backHome}
+    <div class="ghead"><h1>Qui est-ce ?</h1><p class="desc">Chacun reçoit une personnalité secrète. Posez des questions fermées à tour de rôle et trouvez celle de l'autre en premier.</p></div>
+    <div class="setup">
+      <fieldset><legend>Thèmes <small class="note">· plusieurs choix possibles, ils se mélangent</small></legend><div class="toggles">${QUI_THEMES.map(([k, name]) => `<button type="button" class="tg" data-th="${k}" aria-pressed="${c.themes.includes(k)}">${name} <small>${PERSOS[k].length}</small></button>`).join('')}</div></fieldset>
+      <fieldset><legend>Taille du plateau</legend><div class="toggles">${toggles(QSIZES, 'size', k => c.size === k, k => k > avail)}</div></fieldset>
+      <div class="row-end">
+        <button class="btn" type="button" id="multi">Créer un salon</button>
+        <p class="note">2 joueurs · ${n} personnalités · à distance ou côte à côte, chacun sur son écran</p>
+      </div>
+      <p class="err" id="setup-err" aria-live="polite"></p>
+    </div>`;
+  if (focusSel) { const f = view().querySelector(focusSel); if (f) f.focus(); }
+  view().onclick = (e) => {
+    const b = e.target.closest('button'); if (!b || b.disabled) return;
+    if (b.dataset.th) {
+      const k = b.dataset.th;
+      if (c.themes.includes(k)) { if (c.themes.length > 1) c.themes = c.themes.filter(x => x !== k); } else c.themes = [...c.themes, k];
+      saveCfg('pg-qui', c); quiSetup(`[data-th="${k}"]`); return;
+    }
+    if (b.dataset.size) { c.size = +b.dataset.size; saveCfg('pg-qui', c); quiSetup(`[data-size="${c.size}"]`); return; }
+    if (b.id === 'multi') { saveCfg('pg-qui', c); createRoom('qui', c, quiItems(c), b); }
+  };
+};
+
+const renderQui = (back, isHost) => {
+  const { ctl, st } = cur, me = ctl.me, it = st.items, board = it.board || [], order = it.order || [];
+  const rk = String(st.round.startAt);
+  const qi = $('qq'), hadFocus = !!(qi && document.activeElement === qi);
+  if (qi) cur.qdraft = qi.value;
+  if (cur.qmFor !== rk) { cur.qmFor = rk; cur.qm = order.includes(me) ? quiRead(st, me) : null; cur.qpick = null; cur.qdraft = ''; }
+  const playing = !!cur.qm, opp = order.find(u => u !== me);
+  const P = (u) => (st.players || {})[u] || { name: '?' };
+  const nm = (u) => (u === me ? 'Toi' : esc(P(u).name));
+  const f = quiFlow(st), ended = f.kind === 'end';
+  const picking = playing && !ended && cur.qpick !== null;
+
+  // Hôte : une manche gagnée = 1 point, compté une seule fois.
+  if (ended && isHost && cur.scored !== rk) {
+    cur.scored = rk;
+    ctl.hostUpdate({ [`players/${f.winner}/score`]: ((P(f.winner).score) || 0) + 1, [`players/${f.winner}/last`]: 1 });
+  }
+
+  const down = new Set(playing ? cur.qm.down : []);
+  const cards = board.map((p, k) => {
+    let cls = '';
+    if (ended) { if (k === it.secrets[opp] || (!playing && order.some(u => it.secrets[u] === k))) cls += ' win'; else if (down.has(k)) cls += ' down'; }
+    else { if (down.has(k)) cls += ' down'; if (picking && cur.qpick === k) cls += ' pick'; }
+    return persoCard(p, k, cls, !playing || ended);
+  }).join('');
+
+  let act = '';
+  if (ended) {
+    const gp = board[f.pick], oppOfG = order.find(u => u !== f.guesser);
+    const won = f.winner === me;
+    act = `<p class="qtext ${won ? 'okc' : playing ? 'koc' : ''}">${playing ? (won ? 'Gagné !' : 'Perdu…') : `${esc(P(f.winner).name)} gagne la manche`}</p>
+      <p>${nm(f.guesser)} ${f.guesser === me ? 'as' : 'a'} proposé <b>${esc(gp ? gp.n : '?')}</b> : ${f.ok ? 'c’était la bonne réponse.' : `raté, c’était <b>${esc(board[it.secrets[oppOfG]].n)}</b>.`}</p>
+      ${playing && opp ? `<p class="note">Personnalité de ${esc(P(opp).name)} : <b>${esc(board[it.secrets[opp]].n)}</b></p>` : ''}
+      <div class="btns">${isHost ? '<button class="btn" type="button" id="again">Nouvelle manche</button>' : '<p class="note">La personne qui a créé le salon lance la manche suivante.</p>'}</div>
+      <p class="err" id="end-err" aria-live="polite"></p>`;
+  } else if (!playing) {
+    act = `<p class="note">Tu regardes la partie entre ${esc(P(order[0]).name)} et ${esc(P(order[1]).name)}.</p>`;
+  } else if (picking) {
+    const pp = board[cur.qpick];
+    act = pp
+      ? `<p>Tu proposes <b>${esc(pp.n)}</b>. Si c'est faux, tu perds la manche.</p><div class="btns"><button class="btn" type="button" id="confirm">Valider</button><button class="btn ghost" type="button" id="cancel">Annuler</button></div>`
+      : `<p><b>Clique sur la personnalité que tu proposes.</b></p><div class="btns"><button class="btn ghost" type="button" id="cancel">Annuler</button></div>`;
+  } else if (f.kind === 'ask' && f.who === me) {
+    act = `<p><b>À toi de poser une question.</b></p>
+      <form id="askf" class="askf"><input type="text" id="qq" maxlength="120" autocomplete="off" placeholder="Ex. : Est-ce une femme ?" aria-label="Ta question"><button class="btn" type="submit">Poser</button></form>
+      <p class="note">Vous êtes côte à côte ? Laisse vide et pose-la à voix haute.</p>
+      <button class="btn ghost" type="button" id="guess">Proposer une personnalité</button>`;
+  } else if (f.kind === 'ask') {
+    act = `<p>${esc(P(f.who).name)} prépare sa question…</p>`;
+  } else if (f.who === me) {
+    act = `<p class="note">${esc(P(f.asker).name)} demande :</p><p class="qtext">${esc(f.q)}</p>
+      <div class="btns"><button class="btn" type="button" data-r="Oui">Oui</button><button class="btn" type="button" data-r="Non">Non</button><button class="btn ghost" type="button" data-r="Je ne sais pas">Je ne sais pas</button></div>`;
+  } else {
+    act = `<p class="note">Ta question :</p><p class="qtext">${esc(f.q)}</p><p class="note">En attente de la réponse de ${esc(P(f.who).name)}…</p>`;
+  }
+
+  const log = quiLog(st);
+  const plRows = order.map(u => {
+    const left = board.length - quiOf(st, u).down.length;
+    return playerRow({ uid: u, ...P(u) }, me, `<span class="sc">${left} restant${left > 1 ? 's' : ''} · ${P(u).score || 0} pt${(P(u).score || 0) > 1 ? 's' : ''}</span>`);
+  }).join('');
+  const mine = playing ? board[it.secrets[me]] : null;
+
+  view().innerHTML = `${back}
+    <div class="qui" id="play">
+      <div class="hud"><span>Qui est-ce ?${ctl.code ? ` · salon ${esc(ctl.code)}` : ''}</span><span>${board.length} personnalités</span></div>
+      <div class="quiwrap">
+        <div class="qboard${picking ? ' picking' : ''}" aria-label="Plateau : clique sur une personnalité pour la baisser ou la relever">${cards}</div>
+        <aside class="qside">
+          ${mine ? `<div class="secret">${face(mine)}<div><p class="note">Ta personnalité secrète</p><strong>${esc(mine.n)}</strong>${mine.s ? `<small>${esc(mine.s)}</small>` : ''}</div></div>` : ''}
+          <div class="qact" aria-live="polite">${act}</div>
+        </aside>
+        <div class="qinfo">
+          <div><h2 class="sub">Joueurs</h2><ul class="plist">${plRows}</ul></div>
+          <div><h2 class="sub">Questions</h2>${log.length ? `<ol class="qlog">${log.map(l => `<li><span class="note">${nm(l.u)}</span> ${esc(l.q)} <span class="ans ${ansCls(l.r)}">${l.r ? esc(l.r) : '…'}</span></li>`).join('')}</ol>` : '<p class="note">Aucune question pour l’instant.</p>'}</div>
+        </div>
+      </div>
+    </div>`;
+  const lg = view().querySelector('.qlog'); if (lg) lg.scrollTop = lg.scrollHeight;
+  const q2 = $('qq');
+  if (q2) { q2.value = cur.qdraft || ''; if (hadFocus) { q2.focus(); q2.setSelectionRange(q2.value.length, q2.value.length); } }
+
+  view().onclick = (e) => {
+    const b = e.target.closest('button'); if (!b || b.disabled || !cur || !cur.qm) return;
+    const F = quiFlow(cur.st);
+    if (b.dataset.p !== undefined) {
+      const k = +b.dataset.p;
+      if (cur.qpick !== null) cur.qpick = k;
+      else { const d = new Set(cur.qm.down); if (d.has(k)) d.delete(k); else d.add(k); cur.qm.down = [...d]; quiSave(); }
+      renderQui(back, isHost);
+      const nb = view().querySelector(`[data-p="${k}"]`); if (nb) nb.focus();
+      return;
+    }
+    if (b.id === 'guess') { cur.qpick = -1; renderQui(back, isHost); return; }
+    if (b.id === 'cancel') { cur.qpick = null; renderQui(back, isHost); return; }
+    if (b.id === 'confirm' && F.kind === 'ask' && F.who === me && board[cur.qpick]) { cur.qm.g = cur.qpick; cur.qpick = null; quiSave(); renderQui(back, isHost); return; }
+    if (b.dataset.r && F.kind === 'answer' && F.who === me) { cur.qm.rs = [...cur.qm.rs, b.dataset.r]; quiSave(); renderQui(back, isHost); return; }
+    if (b.id === 'again' && isHost) {
+      b.disabled = true;
+      const pair = quiPair(cur.st);
+      if (pair.length < 2) { $('end-err').textContent = 'Il faut deux joueurs connectés.'; b.disabled = false; return; }
+      const ord = pair.includes(order[0]) && pair.includes(order[1]) ? [order[1], order[0]] : shuffle(pair);
+      ctl.hostUpdate({ items: quiDeal(quiItems(cur.st.cfg).board, ord), answers: null, round: { i: 0, phase: 'question', startAt: ctl.now() } });
+    }
+  };
+  const af = $('askf');
+  if (af) af.onsubmit = (e) => {
+    e.preventDefault();
+    const F = quiFlow(cur.st); if (!(F.kind === 'ask' && F.who === me)) return;
+    const v = $('qq').value.trim().replace(/\s+/g, ' ') || '(question posée à voix haute)';
+    cur.qdraft = ''; cur.qm.qs = [...cur.qm.qs, v]; quiSave(); renderQui(back, isHost);
+  };
+};
+
 // ---------- Salons ----------
 let cur = null; // { ctl, st, key }
 
@@ -467,6 +658,7 @@ const playerRow = (p, me, extra) => `<li class="${p.uid === me ? 'me' : ''}${p.o
 const onState = (st) => {
   if (!cur) return;
   cur.st = st;
+  if (st.game === 'qui' && st.status === 'playing') { cur.key = 'qui'; renderRoom(); updateDynamic(); return; }
   const me = cur.ctl.me;
   const answered = st.game === 'mot' ? motGuesses(st, st.round.i, me).length : !!answersAt(st, st.round.i)[me];
   const key = [st.status, st.round.i, st.round.phase, st.round.startAt, answered].join('|');
@@ -486,7 +678,8 @@ const renderRoom = () => {
   if (st.status === 'lobby') {
     stopAudio();
     const link = `${location.origin}${location.pathname}#salon-${ctl.code}`;
-    const n = (st.items || []).length;
+    const quiMode = st.game === 'qui';
+    const n = quiMode ? ((st.items || {}).board || []).length : (st.items || []).length;
     view().innerHTML = `${back}
       <div class="lobby">
         <div class="codebox">
@@ -497,11 +690,11 @@ const renderRoom = () => {
           <p class="note" id="copy-msg" aria-live="polite"></p>
         </div>
         <div>
-          <div class="ghead" style="margin-top:0"><h1>${title}</h1><p class="desc">${motMode ? `${n} mot${n > 1 ? 's' : ''} de ${(st.cfg || {}).len || 5} lettres · ${MAX_TRIES} essais · le premier qui trouve gagne la manche` : `${n} ${quizMode ? 'question' : 'morceau'}${n > 1 ? (quizMode ? 's' : 'x') : ''} · ${SECS[st.game]} secondes chacun${quizMode ? 'e' : ''}`}</p></div>
+          <div class="ghead" style="margin-top:0"><h1>${title}</h1><p class="desc">${quiMode ? `${n} personnalités · 2 joueurs · le premier qui trouve la personnalité de l’autre gagne` : motMode ? `${n} mot${n > 1 ? 's' : ''} de ${(st.cfg || {}).len || 5} lettres · ${MAX_TRIES} essais · le premier qui trouve gagne la manche` : `${n} ${quizMode ? 'question' : 'morceau'}${n > 1 ? (quizMode ? 's' : 'x') : ''} · ${SECS[st.game]} secondes chacun${quizMode ? 'e' : ''}`}</p></div>
           <h2 class="sub">Joueurs</h2>
           <ul class="plist" id="plist"></ul>
           ${st.game === 'blind' ? '<button class="btn ghost" type="button" id="unlock">Activer le son sur cet appareil</button>' : ''}
-          <div class="row-end" style="margin-top:16px">${isHost ? '<button class="btn" type="button" id="start">Lancer la partie</button><p class="note">Lance quand tout le monde est là.</p>' : '<p class="note">En attente du lancement par la personne qui a créé le salon.</p>'}</div>
+          <div class="row-end" style="margin-top:16px">${isHost ? `<button class="btn" type="button" id="start">Lancer la partie</button><p class="note" id="start-note">${quiMode ? 'Il faut deux joueurs.' : 'Lance quand tout le monde est là.'}</p>` : '<p class="note">En attente du lancement par la personne qui a créé le salon.</p>'}</div>
         </div>
       </div>`;
     $('copy').onclick = () => {
@@ -509,11 +702,18 @@ const renderRoom = () => {
       navigator.clipboard.writeText(link).then(() => { msg.textContent = 'Lien copié.'; }).catch(() => { msg.textContent = link; });
     };
     const ul = $('unlock'); if (ul) ul.onclick = () => { unlockAudio(); ul.textContent = 'Son activé'; ul.disabled = true; };
-    const sb = $('start'); if (sb) sb.onclick = () => { unlockAudio(); sb.disabled = true; ctl.hostUpdate({ status: 'playing', round: { i: 0, phase: 'question', startAt: ctl.now() + 3000 } }); };
+    const sb = $('start');
+    if (sb && quiMode) sb.onclick = () => {
+      const pair = quiPair(cur.st); if (pair.length < 2) return;
+      sb.disabled = true;
+      ctl.hostUpdate({ items: quiDeal(cur.st.items.board, shuffle(pair)), answers: null, status: 'playing', round: { i: 0, phase: 'question', startAt: ctl.now() } });
+    };
+    else if (sb) sb.onclick = () => { unlockAudio(); sb.disabled = true; ctl.hostUpdate({ status: 'playing', round: { i: 0, phase: 'question', startAt: ctl.now() + 3000 } }); };
     return;
   }
 
   if (st.status === 'ended') { renderEnd(back, isHost); return; }
+  if (st.game === 'qui') { renderQui(back, isHost); return; }
   if (motMode) { renderMot(back, isHost); return; }
 
   const i = st.round.i, item = st.items[i], total = st.items.length;
@@ -646,6 +846,12 @@ const updateDynamic = () => {
   const me = ctl.me;
   const pl = $('plist');
   if (pl && st.status === 'lobby') pl.innerHTML = ranking(st).sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0)).map(p => playerRow(p, me, p.uid === st.host ? '<span class="sc">hôte</span>' : '')).join('');
+  const qs = $('start'), qn = $('start-note');
+  if (qs && st.status === 'lobby' && st.game === 'qui') {
+    const k = onlineUids(st).length;
+    qs.disabled = k < 2;
+    if (qn) qn.textContent = k < 2 ? 'En attente d’un deuxième joueur…' : k > 2 ? 'Les deux premiers arrivés jouent, les autres regardent.' : 'Vous êtes deux, c’est parti quand tu veux.';
+  }
   const pts = $('pts'); if (pts) pts.textContent = (((st.players || {})[me] || {}).score || 0) + ' pts';
   const w = $('waiting');
   if (w && st.status === 'playing' && !ctl.local && st.game !== 'mot') {
@@ -669,7 +875,7 @@ const updateDynamic = () => {
 setInterval(() => {
   if (!cur || !cur.st) return;
   const { ctl, st } = cur;
-  if (st.status !== 'playing' || st.round.phase !== 'question') return;
+  if (st.status !== 'playing' || st.round.phase !== 'question' || st.game === 'qui') return;
   const sec = SECS[st.game];
   const el = (ctl.now() - st.round.startAt) / 1000;
   const pending = el < 0;
@@ -747,7 +953,7 @@ const route = () => {
   v.classList.toggle('hidden', !inGame);
   if (roomCode) { joinRoom(roomCode.toUpperCase()); document.title = 'Salon · Party Games'; }
   else if (g) {
-    if (g.id === 'quiz') quizSetup(); else if (g.id === 'devine-le-mot') motSetup(); else if (g.id === 'blind-test') { blindSetup(); if (!currentPool().length && !blind.loading) loadDeezer(); }
+    if (g.id === 'quiz') quizSetup(); else if (g.id === 'qui-est-ce') quiSetup(); else if (g.id === 'devine-le-mot') motSetup(); else if (g.id === 'blind-test') { blindSetup(); if (!currentPool().length && !blind.loading) loadDeezer(); }
     else renderGame(g);
     document.title = g.name + ' · Party Games';
   } else document.title = 'Party Games';

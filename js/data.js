@@ -49,7 +49,7 @@ const covers = {
 };
 
 const GAMES = [
-  { id: 'qui-est-ce', name: 'Qui est-ce ?', desc: 'Trouve le personnage secret de ton adversaire avant qu’il trouve le tien.', players: '2 joueurs', step: 'Étape 4',
+  { id: 'qui-est-ce', name: 'Qui est-ce ?', desc: 'Trouve la personnalité secrète de ton adversaire avant qu’il trouve la tienne.', players: '2 joueurs', step: 'Étape 4', ready: true,
     rules: ['Chaque joueur reçoit un personnage secret, tiré au hasard dans le thème choisi.', 'À tour de rôle, posez une question fermée : oui ou non.', 'Éliminez les personnages qui ne correspondent pas.', 'Le premier qui nomme le bon personnage gagne.'] },
   { id: 'quiz', name: 'Quiz', desc: 'Questions sur la K-pop, les séries, les films et la culture générale.', players: 'Solo ou multijoueur', step: 'Étape 2', ready: true,
     rules: ['Sélectionne les thèmes avant la partie.', 'Réponds parmi 4 propositions ou en tapant ta réponse.', 'Les petites fautes d’orthographe sont acceptées.', 'Les réponses rapides rapportent plus de points.'] },
