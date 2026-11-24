@@ -66,13 +66,17 @@ export async function openRoom(code, me) {
     online: true, joinedAt: prev && prev.joinedAt ? prev.joinedAt : Date.now()
   });
   const onlineRef = ref(db, `rooms/${code}/players/${uid}/online`);
-  onDisconnect(onlineRef).set(false);
+  // Présence : à chaque (re)connexion au serveur, on se remet « en ligne ».
+  // Sans ça, une micro-coupure (téléphone, onglet en arrière-plan) laissait le joueur « déconnecté » pour toujours.
+  const unsubConn = onValue(ref(db, '.info/connected'), (s) => {
+    if (s.val() === true) onDisconnect(onlineRef).set(false).then(() => set(onlineRef, true)).catch(() => {});
+  });
   const listeners = [];
   const unsub = onValue(r, (s) => { const v = s.val(); if (v) listeners.forEach(f => f(v)); });
   return {
     code, me: uid, local: false, now,
     subscribe(f) { listeners.push(f); },
-    close() { unsub(); set(onlineRef, false).catch(() => {}); },
+    close() { unsub(); unsubConn(); onDisconnect(onlineRef).cancel().catch(() => {}); set(onlineRef, false).catch(() => {}); },
     answer(i, v) { return set(ref(db, `rooms/${code}/answers/${i}/${uid}`), { v, t: now() }).catch(() => {}); },
     // Devine le mot : tous les essais de la manche, séparés par des virgules.
     guess(i, v) { return set(ref(db, `rooms/${code}/answers/${i}/${uid}`), { v, t: now() }).catch(() => {}); },
