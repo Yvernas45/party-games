@@ -1,9 +1,9 @@
 // Party Games : accueil, profil, Quiz, Blind test et Devine le mot en solo ou en salon.
-import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=11';
-import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=11';
-import { fetchArtists } from './deezer.js?v=11';
-import { MOTS } from './mots.js?v=11';
-import { QUI_THEMES, PERSOS } from './qui.js?v=11';
+import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=12';
+import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=12';
+import { fetchArtists } from './deezer.js?v=12';
+import { MOTS } from './mots.js?v=12';
+import { QUI_THEMES, PERSOS } from './qui.js?v=12';
 
 const $ = (id) => document.getElementById(id);
 const view = () => $('view-game');
@@ -16,7 +16,7 @@ const backHome = `<a href="#accueil" class="btn ghost back">← Retour aux jeux<
 
 // Le réseau (Firebase) ne se charge que quand on joue en salon.
 let netP = null;
-const getNet = () => (netP = netP || import('./net.js?v=11'));
+const getNet = () => (netP = netP || import('./net.js?v=12'));
 
 // ---------- Profil ----------
 const store = {
@@ -434,9 +434,9 @@ document.addEventListener('keydown', (e) => {
 // Chaque joueur n'écrit que sa propre fiche (answers/0/<uid>) : personnages baissés, questions posées,
 // réponses données et proposition finale. Le tour de jeu se déduit des deux fiches.
 const QSIZES = [[16, '16'], [24, '24'], [30, '30']];
-const qui = { cfg: loadCfg('pg-qui', { themes: ['kpop'], size: 24 }) };
+const qui = { cfg: loadCfg('pg-qui', { themes: ['stars'], size: 24 }) };
 qui.cfg.themes = (Array.isArray(qui.cfg.themes) ? qui.cfg.themes : []).filter(t => PERSOS[t]);
-if (!qui.cfg.themes.length) qui.cfg.themes = ['kpop'];
+if (!qui.cfg.themes.length) qui.cfg.themes = ['stars'];
 if (![16, 24, 30].includes(qui.cfg.size)) qui.cfg.size = 24;
 const quiPool = (cfg) => (cfg.themes || []).flatMap(t => PERSOS[t] || []);
 const quiItems = (cfg) => ({ board: shuffle(quiPool(cfg)).slice(0, cfg.size).map(p => ({ n: p.n, s: p.s || '', img: p.img || '' })) });
