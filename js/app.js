@@ -178,9 +178,15 @@ const quizSetup = (focusSel, msg) => {
 
 // ---------- Réglages : Blind test ----------
 const blind = {
-  cfg: loadCfg('pg-blind', { src: 'deezer', kind: 'chart', q: 'BTS, BLACKPINK, TWICE, Stray Kids', pl: '', mode: 'choice', count: 10 }),
+  cfg: loadCfg('pg-blind', { src: 'deezer', kind: 'artists', q: 'Taylor Swift, Dua Lipa, The Weeknd, Ed Sheeran, Billie Eilish, Bruno Mars, Ariana Grande, Harry Styles, Lady Gaga, Rihanna', pl: '', mode: 'choice', count: 10 }),
   files: [], pool: [], poolKey: '', loading: false, msg: ''
 };
+const PRESETS = [
+  ['Pop', 'Taylor Swift, Dua Lipa, The Weeknd, Ed Sheeran, Billie Eilish, Bruno Mars, Ariana Grande, Harry Styles, Lady Gaga, Rihanna'],
+  ['K-pop', 'BTS, BLACKPINK, TWICE, Stray Kids, NewJeans, SEVENTEEN, aespa, IVE, LE SSERAFIM, ITZY'],
+  ['Variété française', 'Aya Nakamura, Angèle, Stromae, Indila, Soprano, Louane, Vianney, Kendji Girac, Zaz, Black M'],
+  ['Rap FR', 'Ninho, Jul, PNL, Gims, SCH, Damso, Orelsan, Booba, Nekfeu, Tiakola']
+];
 const srcKey = (c) => JSON.stringify([c.kind, c.kind === 'artists' ? c.q : '', c.kind === 'playlist' ? c.pl : '']);
 const currentPool = () => (blind.cfg.src === 'files' ? blind.files.filter(x => x.title.trim()) : (blind.poolKey === srcKey(blind.cfg) ? blind.pool : []));
 
@@ -220,6 +226,7 @@ const blindSetup = (focusSel) => {
             <div class="trk"><input type="text" data-k="${k}" data-f="title" value="${esc(x.title)}" placeholder="Titre" aria-label="Titre du morceau ${k + 1}"><input type="text" data-k="${k}" data-f="artist" value="${esc(x.artist)}" placeholder="Artiste" aria-label="Artiste du morceau ${k + 1}"><button type="button" class="tg" data-rm="${k}">Retirer</button></div>`).join('')}</div>` : ''}`
         : `
           <div class="toggles" style="margin-top:12px">${toggles([['chart', 'Top du moment'], ['artists', 'Artistes'], ['playlist', 'Playlist Deezer']], 'kind', k => c.kind === k)}</div>
+          ${c.kind === 'artists' ? `<div class="toggles" style="margin-top:12px">${PRESETS.map(([n, q], k) => `<button type="button" class="tg" data-preset="${k}" aria-pressed="${c.q === q}">${n}</button>`).join('')}</div>` : ''}
           ${c.kind === 'artists' ? `<label for="dz-q" class="lbl" style="display:block;margin-top:12px">Artistes, séparés par des virgules</label><input type="text" id="dz-q" value="${esc(c.q)}" placeholder="BTS, BLACKPINK, TWICE">` : ''}
           ${c.kind === 'playlist' ? `<label for="dz-pl" class="lbl" style="display:block;margin-top:12px">Lien de la playlist</label><input type="text" id="dz-pl" value="${esc(c.pl)}" placeholder="https://www.deezer.com/fr/playlist/…">` : ''}
           <div class="row-end" style="margin-top:12px"><button class="btn ghost" type="button" id="load"${blind.loading ? ' disabled' : ''}>${blind.loading ? 'Chargement…' : 'Charger les morceaux'}</button>
@@ -261,7 +268,8 @@ const blindSetup = (focusSel) => {
     let sel = null;
     if (b.dataset.rm) { const k = +b.dataset.rm; URL.revokeObjectURL(blind.files[k].url); blind.files.splice(k, 1); sel = '#files'; }
     else if (b.dataset.src) { c.src = b.dataset.src; blind.msg = ''; sel = `[data-src="${c.src}"]`; }
-    else if (b.dataset.kind) { c.kind = b.dataset.kind; blind.msg = ''; sel = `[data-kind="${c.kind}"]`; if (c.kind === 'chart') { saveCfg('pg-blind', c); loadDeezer(); return; } }
+    else if (b.dataset.kind) { c.kind = b.dataset.kind; blind.msg = ''; sel = `[data-kind="${c.kind}"]`; if (c.kind !== 'playlist') { saveCfg('pg-blind', c); loadDeezer(); return; } }
+    else if (b.dataset.preset) { c.q = PRESETS[+b.dataset.preset][1]; saveCfg('pg-blind', c); loadDeezer(); return; }
     else if (b.dataset.mode) { c.mode = b.dataset.mode; sel = `[data-mode="${c.mode}"]`; }
     else if (b.dataset.count) { c.count = +b.dataset.count; sel = `[data-count="${c.count}"]`; }
     else if (b.id === 'load') { saveCfg('pg-blind', c); loadDeezer(); return; }
@@ -569,7 +577,7 @@ const route = () => {
   v.classList.toggle('hidden', !inGame);
   if (roomCode) { joinRoom(roomCode.toUpperCase()); document.title = 'Salon · Party Games'; }
   else if (g) {
-    if (g.id === 'quiz') quizSetup(); else if (g.id === 'blind-test') { blindSetup(); if (blind.cfg.src === 'deezer' && blind.cfg.kind === 'chart' && !currentPool().length && !blind.loading) loadDeezer(); }
+    if (g.id === 'quiz') quizSetup(); else if (g.id === 'blind-test') { blindSetup(); if (blind.cfg.src === 'deezer' && blind.cfg.kind !== 'playlist' && !currentPool().length && !blind.loading) loadDeezer(); }
     else renderGame(g);
     document.title = g.name + ' · Party Games';
   } else document.title = 'Party Games';
