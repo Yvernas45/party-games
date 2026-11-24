@@ -1,7 +1,7 @@
 // Party Games : accueil, profil, Quiz et Blind test en solo ou en salon.
-import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=5';
-import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=5';
-import { fetchArtists } from './deezer.js?v=5';
+import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=6';
+import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=6';
+import { fetchArtists } from './deezer.js?v=6';
 
 const $ = (id) => document.getElementById(id);
 const view = () => $('view-game');
@@ -12,7 +12,7 @@ const backHome = `<a href="#accueil" class="btn ghost back">← Retour aux jeux<
 
 // Le réseau (Firebase) ne se charge que quand on joue en salon.
 let netP = null;
-const getNet = () => (netP = netP || import('./net.js?v=5'));
+const getNet = () => (netP = netP || import('./net.js?v=6'));
 
 // ---------- Profil ----------
 const store = {
@@ -213,7 +213,7 @@ const loadDeezer = async () => {
   } catch (err) {
     if (srcKey(blind.cfg) !== key) { blind.loading = false; return loadDeezer(); }
     blind.pool = []; blind.poolKey = '';
-    blind.msg = 'Impossible de joindre Deezer. Vérifie ta connexion et réessaie.';
+    blind.msg = err.message === 'empty' ? 'Deezer n\u2019a renvoyé aucun extrait pour ces genres. Réessaie dans un instant.' : 'Impossible de joindre Deezer. Vérifie ta connexion et réessaie.';
   }
   blind.loading = false;
   if (location.hash === '#blind-test' && !cur) blindSetup();

@@ -1,5 +1,5 @@
 // Extraits Deezer : API publique, sans compte, appelée en JSONP.
-import { norm } from './util.js?v=5';
+import { norm } from './util.js?v=6';
 
 let n = 0;
 const jsonp = (path) => new Promise((resolve, reject) => {
@@ -41,21 +41,27 @@ export async function fetchPool(src) {
     .filter(t => { const k = norm(t.title) + '|' + norm(t.artist); if (!t.title || seen.has(k)) return false; seen.add(k); return true; });
 }
 
-// Extraits des artistes donnés, par paquets de 8 pour ménager l'API.
+// Extraits des artistes donnés : on trouve d'abord l'artiste exact, puis ses titres les plus écoutés.
+const topOf = async (name, perArtist) => {
+  const found = await jsonp(`/search/artist?q=${encodeURIComponent(name)}&limit=5`);
+  const list = found.data || [];
+  const artist = list.find(a => norm(a.name) === norm(name)) || list[0];
+  if (!artist) return [];
+  const top = await jsonp(`/artist/${artist.id}/top?limit=${perArtist}`);
+  return (top.data || [])
+    .filter(t => t && t.preview && t.readable !== false && t.artist && t.artist.id === artist.id)
+    .map(t => Object.assign(toTrack(t), { artist: artist.name, from: name }));
+};
+
 export async function fetchArtists(names, perArtist) {
   const lists = [];
-  for (let k = 0; k < names.length; k += 8) {
-    const part = await Promise.all(names.slice(k, k + 8).map(a =>
-      jsonp(`/search?q=${encodeURIComponent(`artist:"${a}"`)}&limit=${perArtist}`).catch(() => ({ data: [] }))));
+  let failed = 0;
+  for (let k = 0; k < names.length; k += 6) {
+    const part = await Promise.all(names.slice(k, k + 6).map(a => topOf(a, perArtist).catch(() => { failed++; return []; })));
     lists.push(...part);
   }
   const seen = new Set();
-  const out = lists.flatMap((d, k) => (d.data || []).map(t => Object.assign({}, t, { _q: names[k] })))
-    .filter(t => t && t.preview && t.readable !== false)
-    // Deezer renvoie parfois des artistes au nom proche (ex. « IVE » → « Live ») : on ne garde que le bon.
-    .filter(t => t.artist && norm(t.artist.name) === norm(t._q))
-    .map(t => Object.assign(toTrack(t), { from: t._q }))
-    .filter(t => { const k = norm(t.title) + '|' + norm(t.artist); if (!t.title || seen.has(k)) return false; seen.add(k); return true; });
-  if (!out.length && lists.length) throw new Error('empty');
+  const out = lists.flat().filter(t => { const key = norm(t.title) + '|' + norm(t.artist); if (!t.title || seen.has(key)) return false; seen.add(key); return true; });
+  if (!out.length) throw new Error(failed ? 'network' : 'empty');
   return out;
 }
