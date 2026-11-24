@@ -40,3 +40,20 @@ export async function fetchPool(src) {
     .map(toTrack)
     .filter(t => { const k = norm(t.title) + '|' + norm(t.artist); if (!t.title || seen.has(k)) return false; seen.add(k); return true; });
 }
+
+// Extraits des artistes donnés, par paquets de 8 pour ménager l'API.
+export async function fetchArtists(names, perArtist) {
+  const lists = [];
+  for (let k = 0; k < names.length; k += 8) {
+    const part = await Promise.all(names.slice(k, k + 8).map(a =>
+      jsonp(`/search?q=${encodeURIComponent(`artist:"${a}"`)}&limit=${perArtist}`).catch(() => ({ data: [] }))));
+    lists.push(...part);
+  }
+  const seen = new Set();
+  const out = lists.flatMap((d, k) => (d.data || []).map(t => Object.assign({}, t, { _q: names[k] })))
+    .filter(t => t && t.preview && t.readable !== false)
+    .map(t => Object.assign(toTrack(t), { from: t._q }))
+    .filter(t => { const k = norm(t.title) + '|' + norm(t.artist); if (!t.title || seen.has(k)) return false; seen.add(k); return true; });
+  if (!out.length && lists.length) throw new Error('empty');
+  return out;
+}
