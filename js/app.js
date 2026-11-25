@@ -1,9 +1,9 @@
 // Party Games : accueil, profil, Quiz, Blind test et Devine le mot en solo ou en salon.
-import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=15';
-import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=15';
-import { fetchArtists } from './deezer.js?v=15';
-import { MOTS } from './mots.js?v=15';
-import { QUI_THEMES, PERSOS } from './qui.js?v=15';
+import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=16';
+import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=16';
+import { fetchArtists } from './deezer.js?v=16';
+import { MOTS } from './mots.js?v=16';
+import { QUI_THEMES, PERSOS } from './qui.js?v=16';
 
 const $ = (id) => document.getElementById(id);
 const view = () => $('view-game');
@@ -16,7 +16,7 @@ const backHome = `<a href="#accueil" class="btn ghost back">← Retour aux jeux<
 
 // Le réseau (Firebase) ne se charge que quand on joue en salon.
 let netP = null;
-const getNet = () => (netP = netP || import('./net.js?v=15'));
+const getNet = () => (netP = netP || import('./net.js?v=16'));
 
 // ---------- Profil ----------
 const store = {
@@ -438,7 +438,9 @@ const qui = { cfg: loadCfg('pg-qui', { themes: ['stars'], size: 24 }) };
 qui.cfg.themes = (Array.isArray(qui.cfg.themes) ? qui.cfg.themes : []).filter(t => PERSOS[t]);
 if (!qui.cfg.themes.length) qui.cfg.themes = ['stars'];
 if (![16, 24, 30].includes(qui.cfg.size)) qui.cfg.size = 24;
-const quiPool = (cfg) => (cfg.themes || []).flatMap(t => PERSOS[t] || []);
+// Partie test : uniquement les personnalités qui ont une photo, sur un plateau de 25.
+const quiPhotos = () => Object.values(PERSOS).flat().filter(p => p.img);
+const quiPool = (cfg) => (cfg.test ? quiPhotos() : (cfg.themes || []).flatMap(t => PERSOS[t] || []));
 const quiItems = (cfg) => ({ board: shuffle(quiPool(cfg)).slice(0, cfg.size).map(p => ({ n: p.n, s: p.s || '', img: p.img || '' })) });
 const quiDeal = (board, order) => { const [x, y] = shuffle(board.map((_, k) => k)); return { board, order, secrets: { [order[0]]: x, [order[1]]: y } }; };
 const quiPair = (st) => Object.entries(st.players || {}).filter(([, p]) => p.online !== false)
@@ -494,6 +496,7 @@ const quiSetup = (focusSel) => {
       <fieldset><legend>Taille du plateau</legend><div class="toggles">${toggles(QSIZES, 'size', k => c.size === k, k => k > avail)}</div></fieldset>
       <div class="row-end">
         <button class="btn" type="button" id="multi">Créer un salon</button>
+        <button class="btn ghost" type="button" id="test">Partie test : 25 photos</button>
         <p class="note">2 joueurs · ${n} personnalités · à distance ou côte à côte, chacun sur son écran</p>
       </div>
       <p class="err" id="setup-err" aria-live="polite"></p>
@@ -508,6 +511,7 @@ const quiSetup = (focusSel) => {
     }
     if (b.dataset.size) { c.size = +b.dataset.size; saveCfg('pg-qui', c); quiSetup(`[data-size="${c.size}"]`); return; }
     if (b.id === 'multi') { saveCfg('pg-qui', c); createRoom('qui', c, quiItems(c), b); }
+    else if (b.id === 'test') { const t = { themes: c.themes, size: 25, test: true }; createRoom('qui', t, quiItems(t), b); }
   };
 };
 
