@@ -1,9 +1,9 @@
 // Party Games : accueil, profil, Quiz, Blind test et Devine le mot en solo ou en salon.
-import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=13';
-import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=13';
-import { fetchArtists } from './deezer.js?v=13';
-import { MOTS } from './mots.js?v=13';
-import { QUI_THEMES, PERSOS } from './qui.js?v=13';
+import { AV, avatarSvg, covers, GAMES, THEMES, themeName, QUESTIONS } from './data.js?v=14';
+import { esc, shuffle, norm, matches, loadCfg, saveCfg } from './util.js?v=14';
+import { fetchArtists } from './deezer.js?v=14';
+import { MOTS } from './mots.js?v=14';
+import { QUI_THEMES, PERSOS } from './qui.js?v=14';
 
 const $ = (id) => document.getElementById(id);
 const view = () => $('view-game');
@@ -16,7 +16,7 @@ const backHome = `<a href="#accueil" class="btn ghost back">← Retour aux jeux<
 
 // Le réseau (Firebase) ne se charge que quand on joue en salon.
 let netP = null;
-const getNet = () => (netP = netP || import('./net.js?v=13'));
+const getNet = () => (netP = netP || import('./net.js?v=14'));
 
 // ---------- Profil ----------
 const store = {
@@ -943,7 +943,7 @@ const renderGame = (g) => {
         <h1></h1><p class="desc"></p>
         <div class="meta"><span class="tag">${g.players}</span></div>
         <ol>${g.rules.map(() => '<li></li>').join('')}</ol>
-        <div class="status"><strong>En développement</strong><p class="note" style="margin-top:2px">Disponible à l'${g.step.toLowerCase()} du projet.</p></div>
+        <div class="status"><strong>En développement</strong><p class="note" style="margin-top:2px">${/^Étape/.test(g.step) ? `Disponible à l'${g.step.toLowerCase()} du projet.` : 'Ce jeu est en cours de préparation, il revient bientôt.'}</p></div>
       </div>
       ${covers[g.id]()}
     </div>`;
@@ -971,7 +971,7 @@ const route = () => {
   v.classList.toggle('hidden', !inGame);
   if (roomCode) { joinRoom(roomCode.toUpperCase()); document.title = 'Salon · Party Games'; }
   else if (g) {
-    if (g.id === 'quiz') quizSetup(); else if (g.id === 'qui-est-ce') quiSetup(); else if (g.id === 'devine-le-mot') motSetup(); else if (g.id === 'blind-test') { blindSetup(); if (!currentPool().length && !blind.loading) loadDeezer(); }
+    if (!g.ready) renderGame(g); else if (g.id === 'quiz') quizSetup(); else if (g.id === 'qui-est-ce') quiSetup(); else if (g.id === 'devine-le-mot') motSetup(); else if (g.id === 'blind-test') { blindSetup(); if (!currentPool().length && !blind.loading) loadDeezer(); }
     else renderGame(g);
     document.title = g.name + ' · Party Games';
   } else document.title = 'Party Games';
